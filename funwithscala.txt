@@ -1,0 +1,54 @@
+import org.apache.spark.mllib.recommendation._
+import org.apache.spark.mllib.recommendation.ALS
+import org.apache.spark.mllib.recommendation.Rating
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.types._
+
+// assume you have a table with 3 columns: Customer, Product, PurchaseValue
+//Customer ID, product ID, and sum of how much customer spent on the product
+
+val purchaseRdd  = sqlContext.sql("select * from purchases").rdd
+
+purchaseRdd.count
+
+val ratings = purchaseRdd.map{ row =>Rating(row.getInt(0),row.getInt(1),row.getDouble(2))}
+
+val rank = 10
+
+val numIterations =10
+
+val lambda=0.01
+
+val alpha=0.01
+
+val model  = ALS.trainImplicit(ratings, rank, numIterations, lambda, alpha)
+
+val numProducts = 3   // how many products to recommend 
+
+val userID =1000210  // assume this customer already exists in data set as existing customerID
+
+val recommendedProducts = model.recommendProducts(userID, numProducts)
+
+recommendedProducts.foreach(println)
+
+//rating is not estimated rating/probability, higher rating value means better recommentation
+//now assume we have a new customer that is not in the data set
+val newuserID =1111111
+
+val newUser = sc.parallelize(Seq((newuserID, 16, 11)))    // this new customer bought $11 worth of product 16
+
+val newRating = newUser.map(r => Rating(r._1.toInt, r._2.toInt, r._3.toDouble))
+
+val updatedRDD = ratings.union(newRating)
+
+updatedRDD.count  // should be higher now with new customer
+
+val model  = ALS.trainImplicit(updatedRDD, rank, numIterations, lambda, alpha)
+
+//now let us recommend products to the new customer because he or she bought product 16
+
+val newrecommendedProducts = model.recommendProducts(newuserID, numProducts)
+
+//fun with scala ends here :-)
+newrecommendedProducts.foreach(println)
+
